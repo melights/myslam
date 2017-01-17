@@ -63,6 +63,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
        exit(-1);
     }
 
+    float resolution = fsSettings["PointCloudMapping.Resolution"];
 
     //Load ORB Vocabulary
     cout << endl << "Loading ORB Vocabulary. This could take a while..." << endl;
@@ -93,6 +94,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     //Initialize the Tracking thread
     //(it will live in the main thread of execution, the one that called this constructor)
+    mpPointCloudMapping = make_shared<PointCloudMapping>( resolution );
     mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
                              mpMap, mpPointCloudMapping, mpKeyFrameDatabase, strSettingsFile, mSensor);
 

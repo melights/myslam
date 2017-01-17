@@ -33,6 +33,8 @@
 #include"Optimizer.h"
 #include"PnPsolver.h"
 
+#include "pointcloudmapping.h"
+
 #include<iostream>
 
 #include<mutex>
@@ -1138,7 +1140,7 @@ void Tracking::CreateNewKeyFrame()
 
     mpLocalMapper->SetNotStop(false);
 
-mpPointCloudMapping->insertKeyFrame( pKF, this->mImRGB, this->mImRGB_R );
+    mpPointCloudMapping->insertKeyFrame( pKF, this->mImRGB, this->mImRGB_R );
 
     mnLastKeyFrameId = mCurrentFrame.mnId;
     mpLastKeyFrame = pKF;

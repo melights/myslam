@@ -39,7 +39,7 @@
 #include "Converter.h"
 //#include "StereoEfficientLargeScale.h"
 using namespace cv;
-using namespace std;
+//using namespace std;
 //pcl::visualization::PCLVisualizer surface_viewer("Surface");
 bool init=false;
 Eigen::Matrix3f intrinsics;
@@ -73,9 +73,8 @@ void PointCloudMapping::insertKeyFrame(KeyFrame* kf, cv::Mat& left_img, cv::Mat&
     right=right_img;
     // colorImgs.push_back( color.clone() );
     // depthImgs.push_back( depth.clone() );
-    
+
     keyFrameUpdated.notify_one();
-    cout<<"1"<<endl;
 }
 
 pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePointCloud()
@@ -147,8 +146,8 @@ pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePoi
           pz = keyframe->mbf / d;
           px = (static_cast<double>(j) - keyframe->cx) * pz / keyframe->fx;
           py = (static_cast<double>(i) - keyframe->cy) * pz / keyframe->fy;
-        //   if((i-240)*(i-240)+(j-320)*(j-320)>67600) //circle mask for simulation data
-        //     continue;
+           if((i-240)*(i-240)+(j-320)*(j-320)>67600) //circle mask for simulation data
+             continue;
           PointT point;
           point.x = px;
           point.y = py;
@@ -156,8 +155,8 @@ pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePoi
           point.b = left.at<Vec3b>(i, j)[0];
           point.g = left.at<Vec3b>(i, j)[1];
           point.r = left.at<Vec3b>(i, j)[2];
-        //   if (point.b==64 && point.g==64 && point.r==64) //remove grey background for simulation data
-        //     continue;
+           if (point.b==64 && point.g==64 && point.r==64) //remove grey background for simulation data
+             continue;
           tmp->points.push_back(point);
       }
   }
