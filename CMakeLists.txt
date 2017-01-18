@@ -94,6 +94,10 @@ add_executable(stereo
 Examples/Live/stereo.cc)
 target_link_libraries(stereo ${PROJECT_NAME})
 
+add_executable(real_stereo
+Examples/Live/real_stereo.cc)
+target_link_libraries(real_stereo ${PROJECT_NAME})
+
 #set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 #
 #add_executable(rgbd_tum

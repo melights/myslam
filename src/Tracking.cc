@@ -509,6 +509,29 @@ void Tracking::Track()
 
 }
 
+std::vector<cv::Point2f> Tracking::Get_projectedPoints()
+{
+    cv::Mat rVec;
+    cv::Rodrigues(mCurrentFrame.mTcw.rowRange(0,3).colRange(0,3), rVec);
+    cv::Mat tVec = mCurrentFrame.mTcw.rowRange(0,3).col(3).clone();
+    std::vector<cv::Point2f> projectedPoints;
+    
+    const vector<MapPoint*> vpMPs = mpMap->GetAllMapPoints();
+    
+    std::vector<cv::Point3f> allmappoints;
+    for (size_t i = 0; i < vpMPs.size(); i++)
+    {
+        if (vpMPs[i] && !vpMPs[i]->isBad())
+        {
+            cv::Point3f pos = cv::Point3f(vpMPs[i]->GetWorldPos());
+            allmappoints.push_back(pos);
+        }
+    }
+    
+    cv::projectPoints(allmappoints, rVec, tVec, mK, mDistCoef, projectedPoints);
+    
+    return projectedPoints;
+}
 
 void Tracking::StereoInitialization()
 {
@@ -1139,8 +1162,8 @@ void Tracking::CreateNewKeyFrame()
     mpLocalMapper->InsertKeyFrame(pKF);
 
     mpLocalMapper->SetNotStop(false);
-
-    mpPointCloudMapping->insertKeyFrame( pKF, this->mImRGB, this->mImRGB_R );
+    if(mpPointCloudMapping)
+        mpPointCloudMapping->insertKeyFrame( pKF, this->mImRGB, this->mImRGB_R );
 
     mnLastKeyFrameId = mCurrentFrame.mnId;
     mpLastKeyFrame = pKF;

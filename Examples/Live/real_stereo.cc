@@ -9,7 +9,7 @@
 bool playback = true;
 int main(void)
 {
-    ORB_SLAM2::System SLAM("../../Vocabulary/ORBvoc.bin", "./digest_stereo.yaml", ORB_SLAM2::System::STEREO);
+    ORB_SLAM2::System SLAM("../../Vocabulary/ORBvoc.bin", "./real_stereo.yaml", ORB_SLAM2::System::STEREO);
 
     cv::Mat imageL,imageR;
     char filenameL[500],filenameR[500];
@@ -21,9 +21,9 @@ int main(void)
         if (imageNum == 900)
             adder = -1;
         else if (imageNum == 1)
-            adder = 1;
-        sprintf(filenameL, "/home/long/data/digest_stereo/%04d_L.png", imageNum);
-        sprintf(filenameR, "/home/long/data/digest_stereo/%04d_R.png", imageNum);
+            adder = 0;
+        sprintf(filenameR, "/home/long/data/Dataset6/left_rect/%04d.png", imageNum);
+        sprintf(filenameL, "/home/long/data/Dataset6/right_rect/%04d.png", imageNum);
         //std::cout << filenameL << std::endl;
         imageL = cv::imread(filenameL, 1);
         imageR = cv::imread(filenameR, 1);

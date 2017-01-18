@@ -56,6 +56,8 @@ protected:
     cv::Mat mIm;
     int N;
     vector<cv::KeyPoint> mvCurrentKeys;
+    vector<float> mvDistance;
+    vector<cv::Point2f> projectedPoints;
     vector<bool> mvbMap, mvbVO;
     bool mbOnlyTracking;
     int mnTracked, mnTrackedVO;
