@@ -90,6 +90,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     ComputeStereoMatches();
 
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));    
+    mvDistance = vector<float>(N,0.0);
     mvbOutlier = vector<bool>(N,false);
 
 

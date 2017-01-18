@@ -1425,6 +1425,8 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
 
                 if(bestDist<=TH_HIGH)
                 {
+                    CurrentFrame.mvDistance[bestIdx2]=float(fabs(CurrentFrame.mvKeysUn[bestIdx2].pt.x-u)+fabs(CurrentFrame.mvKeysUn[bestIdx2].pt.y-v));
+                    std::cout<<CurrentFrame.mvDistance[bestIdx2]<<"/t";
                     CurrentFrame.mvpMapPoints[bestIdx2]=pMP;
                     nmatches++;
 
