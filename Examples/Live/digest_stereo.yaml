@@ -62,5 +62,5 @@ Viewer.ViewpointY: -0.7
 Viewer.ViewpointZ: -1.8
 Viewer.ViewpointF: 500
 
-PointCloudMapping.Enable: 0
+PointCloudMapping.Enable: 1
 PointCloudMapping.Resolution: 0.03

@@ -384,8 +384,8 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                 //SET EDGE
                 Eigen::Matrix<double,3,1> obs;// 这里和单目不同
                 const cv::KeyPoint &kpUn = pFrame->mvKeysUn[i];
-                const float &kp_ur = pFrame->mvuRight[i];
-                obs << kpUn.pt.x, kpUn.pt.y, kp_ur;// 这里和单目不同
+                const float &kp_ur = pFrame->mvuRight[i]; // 横坐标
+                obs << kpUn.pt.x, kpUn.pt.y, kp_ur;// 观测:特征点
 
                 g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = new g2o::EdgeStereoSE3ProjectXYZOnlyPose();// 这里和单目不同
 

@@ -40,13 +40,15 @@ public:
     // 插入一个keyframe，会更新一次地图
     void insertKeyFrame(KeyFrame* kf, cv::Mat& left_img, cv::Mat& right_img);
     void shutdown();
-    void viewer();
+    void Cloud_Viewer();
+    void Surface_Viewer();
 
 protected:
     pcl::PointCloud< PointCloudMapping::PointT >::Ptr generatePointCloud();
     
     PointCloud::Ptr globalMap;
-    shared_ptr<thread>  viewerThread;   
+    shared_ptr<thread>  cloudViewerThread;   
+    shared_ptr<thread>  surfaceViewerThread;   
     Map* mpMap;
     bool    shutDownFlag    =false;
     mutex   shutDownMutex;  

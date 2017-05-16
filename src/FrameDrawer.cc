@@ -117,13 +117,13 @@ cv::Mat FrameDrawer::DrawFrame()
                     if(vbMap[i])
                     {
                         //cv::rectangle(im,pt1,pt2,cv::Scalar(0,255-color,color));
-                        cv::circle(im,vCurrentKeys[i].pt,5,cv::Scalar(0,255-color,color),-1);
+                        cv::circle(im,vCurrentKeys[i].pt,3,cv::Scalar(0,255-color,color),-1);
                         mnTracked++;
                     }
                     else // This is match to a "visual odometry" MapPoint created in the last frame
                     {
                         //cv::rectangle(im,pt1,pt2,cv::Scalar(255-color,0,color));
-                        cv::circle(im,vCurrentKeys[i].pt,5,cv::Scalar(255-color,0,color),-1);
+                        cv::circle(im,vCurrentKeys[i].pt,3,cv::Scalar(255-color,0,color),-1);
                         mnTrackedVO++;
                     }
                 }
