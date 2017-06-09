@@ -26,6 +26,7 @@
 #include "opencv2/imgcodecs.hpp"
 #include "opencv2/core/utility.hpp"
 #include <pcl/io/pcd_io.h>
+#include <pcl/io/ply_io.h>
 #include <pcl/point_types.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/cloud_viewer.h>
@@ -33,6 +34,7 @@
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/surface/mls.h>
+#include <pcl/surface/gp3.h>
 #include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/filters/voxel_grid.h>
@@ -40,6 +42,7 @@
 //#include "StereoEfficientLargeScale.h"
 using namespace cv;
 //using namespace std;
+#define STRIDE 8
 
 bool simulation = true;
 Eigen::Matrix3f intrinsics;
@@ -47,10 +50,12 @@ PointCloudMapping::PointCloudMapping(double resolution_)
 {
     this->resolution = resolution_;
     voxel.setLeafSize(resolution, resolution, resolution);
-    globalMap = boost::make_shared<PointCloud>();
+    globalMap = boost::make_shared<PointCloudmono>();
+    triangles_ptr = boost::make_shared<pcl::PolygonMesh>();
     namedWindow("Disparity", WINDOW_NORMAL);
-    cloudViewerThread = make_shared<thread>(bind(&PointCloudMapping::Cloud_Viewer, this));
+    //cloudViewerThread = make_shared<thread>(bind(&PointCloudMapping::Cloud_Viewer, this));
     surfaceViewerThread = make_shared<thread>(bind(&PointCloudMapping::Surface_Viewer, this));
+    updateThread = make_shared<thread>(bind(&PointCloudMapping::update, this));
 }
 
 void PointCloudMapping::shutdown()
@@ -60,7 +65,8 @@ void PointCloudMapping::shutdown()
         shutDownFlag = true;
         keyFrameUpdated.notify_one();
     }
-    viewerThread->join();
+    cloudViewerThread->join();
+    surfaceViewerThread->join();
 }
 
 void PointCloudMapping::insertKeyFrame(KeyFrame *kf, cv::Mat &left_img, cv::Mat &right_img)
@@ -125,6 +131,7 @@ pcl::PointCloud<PointCloudMapping::PointT>::Ptr PointCloudMapping::generatePoint
     minMaxLoc(disp, &minVal, &maxVal);
     disp.convertTo(disp8U, CV_8UC1, 255 / (maxVal - minVal));
     imshow("Disparity", disp8U);
+    cv::waitKey();
 
     double px, py, pz;
     uchar pr, pg, pb;
@@ -192,18 +199,97 @@ pcl::PointCloud<PointCloudMapping::PointT>::Ptr PointCloudMapping::generatePoint
     return filter1;
 }
 
+
+pcl::PointCloud<PointCloudMapping::PointTmono>::Ptr PointCloudMapping::generatePointCloudmono()
+{
+    Mat left_grey, right_gery;
+    cvtColor(left, left_grey, cv::COLOR_RGB2GRAY);
+    cvtColor(right, right_gery, cv::COLOR_RGB2GRAY);
+
+    Ptr<StereoBM> bm = StereoBM::create(96, 55);
+    Rect roi1, roi2;
+    Mat disp, disp8U;
+
+    bm->compute(left_grey, right_gery, disp);
+
+    // Mat disp,disp8U;
+    // StereoEfficientLargeScale elas(0,128);
+    // elas(left_grey,right_gery,disp,100);
+
+    double minVal;
+    double maxVal;
+    minMaxLoc(disp, &minVal, &maxVal);
+    disp.convertTo(disp8U, CV_8UC1, 255 / (maxVal - minVal));
+    imshow("Disparity", disp8U);
+    cv::waitKey(10);
+    double px, py, pz;
+    uchar pr, pg, pb;
+    PointCloudmono::Ptr tmp(new PointCloudmono());
+    for (int i = 0; i < left.rows - STRIDE; i += STRIDE)
+    {
+        const short *disp_ptr = disp.ptr<short>(i);
+        for (int j = 0; j < left.cols - STRIDE; j += STRIDE)
+        {
+            double d = static_cast<double>(disp_ptr[j]) / 16;
+            //double d = (double)disp.at<Vec3b>(i, j)[0];
+            //std::cout<<d<<" ";
+            //std::cout<<"i:"<<i<<"j:"<<j<<std::endl;
+            if (d == -1 || d == 0 || d > 100 || d < 0)
+                continue; //Discard bad pixels
+
+            pz = keyframe->mbf / d;
+            px = (static_cast<double>(j) - keyframe->cx) * pz / keyframe->fx;
+            py = (static_cast<double>(i) - keyframe->cy) * pz / keyframe->fy;
+            if (simulation)
+            {
+                if ((i - 240) * (i - 240) + (j - 320) * (j - 320) > 67600) //circle mask for simulation data
+                    continue;
+            }
+            PointTmono point;
+            point.x = px;
+            point.y = py;
+            point.z = pz;
+
+            if (simulation)
+            {
+                if (left.at<Vec3b>(i, j)[0] == 64 && left.at<Vec3b>(i, j)[1] == 64 && left.at<Vec3b>(i, j)[2] == 64) //remove grey background for simulation data
+                    continue;
+            }
+            tmp->points.push_back(point);
+        }
+    }
+    Eigen::Isometry3d T = ORB_SLAM2::Converter::toSE3Quat(keyframe->GetPose());
+    PointCloudmono::Ptr cloud(new PointCloudmono);
+    pcl::transformPointCloud(*tmp, *cloud, T.inverse().matrix());
+    cloud->is_dense = false;
+    //cloud->width = (int) cloud->points.size();
+    //cloud->height = 1;
+    //pcl::io::savePCDFile( "/home/long/surface_reconstruction/PCL/data/testfilter.pcd", *cloud );
+
+    cout << "generate point cloud for kf " << keyframe->mnId << ", size=" << cloud->points.size() << endl;
+
+
+    //   pcl::StatisticalOutlierRemoval<PointT> statistical_filter;
+    //   statistical_filter.setMeanK(80);
+    //   statistical_filter.setStddevMulThresh(1.0);
+    //   statistical_filter.setInputCloud(filter1);
+    //   statistical_filter.filter(*filter2);
+
+    return cloud;
+}
+
 void PointCloudMapping::Cloud_Viewer()
 {
 
     pcl::visualization::CloudViewer cloudviewer("3D Reconstruction");
-    cloudviewer.registerKeyboardCallback(&PointCloudMapping::keyboard_callback, *this);
+    // cloudviewer.registerKeyboardCallback(&PointCloudMapping::keyboard_callback, *this);
 
-    surface_viewer.setBackgroundColor(0, 0, 0); //设置窗口颜色
-    //surface_viewer.setRepresentationToSurfaceForAllActors(); //网格模型以面片形式显示
-    surface_viewer.setRepresentationToPointsForAllActors(); //网格模型以点形式显示
-    //surface_viewer.setRepresentationToWireframeForAllActors();  //网格模型以线框图模式显示
-    surface_viewer.addCoordinateSystem(1); //设置坐标系,参数为坐标显示尺寸
-    surface_viewer.initCameraParameters();
+    // surface_viewer.setBackgroundColor(0, 0, 0); //设置窗口颜色
+    // //surface_viewer.setRepresentationToSurfaceForAllActors(); //网格模型以面片形式显示
+    // surface_viewer.setRepresentationToPointsForAllActors(); //网格模型以点形式显示
+    // //surface_viewer.setRepresentationToWireframeForAllActors();  //网格模型以线框图模式显示
+    // surface_viewer.addCoordinateSystem(1); //设置坐标系,参数为坐标显示尺寸
+    // surface_viewer.initCameraParameters();
     while (1)
     {
         int64 t = getTickCount();
@@ -225,11 +311,11 @@ void PointCloudMapping::Cloud_Viewer()
         }
 
         PointCloud::Ptr p = generatePointCloud();
-        *globalMap += *p;
+        //*globalMap += *p;
 
-        PointCloud::Ptr tmp(new PointCloud());
-        voxel.setInputCloud(globalMap);
-        voxel.filter(*tmp);
+        // PointCloud::Ptr tmp(new PointCloud());
+        // voxel.setInputCloud(globalMap);
+        // voxel.filter(*tmp);
         //globalMap->swap( *tmp );
         // cloudviewer.removeAllShapes();
         // cloudviewer.removeAllPointClouds();
@@ -257,39 +343,53 @@ void PointCloudMapping::Cloud_Viewer()
     }
 }
 
-void PointCloudMapping::Surface_Viewer()
+void PointCloudMapping::update()
 {
-    pcl::visualization::PCLVisualizer surface_viewer("Surface");
-    surface_viewer.setBackgroundColor(0, 0, 0); //设置窗口颜色
-    //surface_viewer.setRepresentationToSurfaceForAllActors(); //网格模型以面片形式显示
-    surface_viewer.setRepresentationToPointsForAllActors(); //网格模型以点形式显示
-    //surface_viewer.setRepresentationToWireframeForAllActors();  //网格模型以线框图模式显示
-    surface_viewer.addCoordinateSystem(1); //设置坐标系,参数为坐标显示尺寸
-    surface_viewer.initCameraParameters();
     while (1)
     {
         int64 t = getTickCount();
+        {
+            unique_lock<mutex> lck_shutdown(shutDownMutex);
+            if (shutDownFlag)
+            {
+                break;
+            }
+        }
+        {
+            unique_lock<mutex> lck_keyframeUpdated(keyFrameUpdateMutex);
+            keyFrameUpdated.wait(lck_keyframeUpdated);
+        }
+        // size_t N = 0;
+        // {
+        //     unique_lock<mutex> lck(keyframeMutex);
+        //     N = keyframes.size();
+        // }
 
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-        pcl::PCLPointCloud2 cloud_blob;
-        pcl::io::loadPCDFile("bun0.pcd", cloud_blob);
-        pcl::fromPCLPointCloud2(cloud_blob, *cloud);
+        PointCloudmono::Ptr p = generatePointCloudmono();
+*globalMap += *p;
+//*globalMap = *p;
+        
+        PointCloudmono::Ptr tmp(new PointCloudmono());
+        voxel.setInputCloud(globalMap);
+        voxel.filter(*tmp);
+        globalMap->swap( *tmp );
+
         //* the data should be available in cloud
 
         // Normal estimation*
         pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> n;
         pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
         pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
-        tree->setInputCloud(cloud);
-        n.setInputCloud(cloud);
+        tree->setInputCloud(globalMap);
+        n.setInputCloud(globalMap);
         n.setSearchMethod(tree);
-        n.setKSearch(20);
+        n.setKSearch(5);
         n.compute(*normals);
         //* normals should not contain the point normals + surface curvatures
 
         // Concatenate the XYZ and normal fields*
         pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals(new pcl::PointCloud<pcl::PointNormal>);
-        pcl::concatenateFields(*cloud, *normals, *cloud_with_normals);
+        pcl::concatenateFields(*globalMap, *normals, *cloud_with_normals);
         //* cloud_with_normals = cloud + normals
 
         // Create search tree*
@@ -298,10 +398,9 @@ void PointCloudMapping::Surface_Viewer()
 
         // Initialize objects
         pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;
-        pcl::PolygonMesh triangles;
 
         // Set the maximum distance between connected points (maximum edge length)
-        gp3.setSearchRadius(0.025);
+        gp3.setSearchRadius(2);
 
         // Set typical values for the parameters
         gp3.setMu(2.5);
@@ -311,13 +410,89 @@ void PointCloudMapping::Surface_Viewer()
         gp3.setMaximumAngle(2 * M_PI / 3);    // 120 degrees
         gp3.setNormalConsistency(false);
 
+pcl::PolygonMesh::Ptr triangles_tmp(new pcl::PolygonMesh());
         // Get result
         gp3.setInputCloud(cloud_with_normals);
         gp3.setSearchMethod(tree2);
-        gp3.reconstruct(triangles);
-
+        gp3.reconstruct(*triangles_tmp);
+        unique_lock<mutex> lck(reconstructionMutex);
+        triangles_ptr.swap(triangles_tmp);
         t = getTickCount() - t;
-        printf("Time elapsed: %fms\n", t * 1000 / getTickFrequency());
+        printf("Total point: %d, Time elapsed: %fms\n", globalMap->size(), t * 1000 / getTickFrequency());
         //cloudviewer.spinOnce(100);
     }
+
+}
+void PointCloudMapping::Surface_Viewer()
+{
+    pcl::visualization::PCLVisualizer surface_viewer("Surface");
+    surface_viewer.setBackgroundColor(0, 0, 0); //设置窗口颜色
+    //surface_viewer.setRepresentationToSurfaceForAllActors(); //网格模型以面片形式显示
+    //surface_viewer.setRepresentationToPointsForAllActors(); //网格模型以点形式显示
+    surface_viewer.registerKeyboardCallback( &PointCloudMapping::keyboard_callback, *this );
+    surface_viewer.setRepresentationToWireframeForAllActors();  //网格模型以线框图模式显示
+    surface_viewer.setShowFPS(1);
+    surface_viewer.addCoordinateSystem(1); //设置坐标系,参数为坐标显示尺寸
+    surface_viewer.initCameraParameters();
+    //surface_viewer.addPolygonMesh(*triangles_ptr,"my"); //设置所要显示的网格对象
+    while (0)
+    {
+        //pcl::PolygonMesh triangles_cp=triangles;
+        surface_viewer.removePolygonMesh("my"); //设置所要显示的网格对象
+        surface_viewer.removeAllShapes();
+        {
+            unique_lock<mutex> lck(reconstructionMutex);
+            if(triangles_ptr->polygons.size()>0)
+                surface_viewer.addPolygonMesh(*triangles_ptr,"my"); //设置所要显示的网格对象
+        }
+                surface_viewer.setRepresentationToWireframeForAllActors();  //网格模型以线框图模式显示
+
+        cv::Mat rVec, tVec;
+        if(mCameraPose.rows > 0){
+            {
+            unique_lock<mutex> lock(mMutexCamera);
+            cv::Mat Rwc = mCameraPose.rowRange(0,3).colRange(0,3).t();
+            cv::Mat twc = -Rwc*mCameraPose.rowRange(0,3).col(3);
+            cv::Rodrigues(Rwc, rVec);
+            tVec = twc;
+            }
+
+            pcl::ModelCoefficients cylinder_coeff;
+            //std::cout<<tVec<<std::endl;
+            cylinder_coeff.values.resize (7);    // We need 7 values
+            cylinder_coeff.values[0] = tVec.at<float>(0);
+            cylinder_coeff.values[1] = tVec.at<float>(1);
+            cylinder_coeff.values[2] = tVec.at<float>(2);
+            // Mat R,Rvec;
+            // R=keyframe->GetRotation();
+            // cv::Rodrigues(R, Rvec);
+            cylinder_coeff.values[3] = rVec.at<float>(0);
+            cylinder_coeff.values[4] = rVec.at<float>(1);
+            cylinder_coeff.values[5] = rVec.at<float>(2);
+            cylinder_coeff.values[6] = 1;
+            cylinder_coeff.values[7] = 1;
+            cylinder_coeff.values[8] = 1;
+            cylinder_coeff.values[9] = 0.3;
+
+                 surface_viewer.addCube(cylinder_coeff);
+        }
+
+        // surface_viewer.addPolygonMesh(triangles,to_string(t));
+        surface_viewer.spinOnce();
+        //cloudviewer.spinOnce(100);
+    }
+}
+
+void PointCloudMapping::keyboard_callback( const pcl::visualization::KeyboardEvent& event, void* )
+{
+                if ( event.keyDown () && event.getKeyCode () == 0x00000020) 
+                  { 
+                        pcl::io::savePLYFile("/home/long/digest.ply",*triangles_ptr);
+                  } 
+}
+
+void PointCloudMapping::SetCurrentCameraPose(const cv::Mat &Tcw)
+{
+    unique_lock<mutex> lock(mMutexCamera);
+    mCameraPose = Tcw.clone();
 }

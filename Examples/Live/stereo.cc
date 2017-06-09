@@ -22,8 +22,8 @@ int main(void)
             adder = -1;
         else if (imageNum == 1)
             adder = 1;
-        sprintf(filenameL, "/home/long/data/digest_stereo/%04d_L.png", imageNum);
-        sprintf(filenameR, "/home/long/data/digest_stereo/%04d_R.png", imageNum);
+        sprintf(filenameL, "/home/long/data/digest_stereo_close/%04d_L.png", imageNum);
+        sprintf(filenameR, "/home/long/data/digest_stereo_close/%04d_R.png", imageNum);
         //std::cout << filenameL << std::endl;
         imageL = cv::imread(filenameL, 1);
         imageR = cv::imread(filenameR, 1);

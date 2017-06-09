@@ -436,7 +436,7 @@ void Tracking::Track()
                 mVelocity = cv::Mat();
 
             mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.mTcw);
-
+            mpPointCloudMapping->SetCurrentCameraPose(mCurrentFrame.mTcw);
             // Clean VO matches
             for(int i=0; i<mCurrentFrame.N; i++)
             {
@@ -511,25 +511,28 @@ void Tracking::Track()
 
 std::vector<cv::Point2f> Tracking::Get_projectedPoints()
 {
-    cv::Mat rVec;
-    cv::Rodrigues(mCurrentFrame.mTcw.rowRange(0,3).colRange(0,3), rVec);
-    cv::Mat tVec = mCurrentFrame.mTcw.rowRange(0,3).col(3).clone();
+    cv::Mat rVec, tVec;
     std::vector<cv::Point2f> projectedPoints;
-    
-    const vector<MapPoint*> vpMPs = mpMap->GetAllMapPoints();
-    
-    std::vector<cv::Point3f> allmappoints;
-    for (size_t i = 0; i < vpMPs.size(); i++)
+        std::vector<cv::Point3f> allmappoints;
+
+    if (mCurrentFrame.mTcw.rows > 0)
     {
-        if (vpMPs[i] && !vpMPs[i]->isBad())
+        cv::Rodrigues(mCurrentFrame.mTcw.rowRange(0, 3).colRange(0, 3), rVec);
+        tVec = mCurrentFrame.mTcw.rowRange(0, 3).col(3).clone();
+
+        const vector<MapPoint *> vpMPs = mpMap->GetAllMapPoints();
+
+        for (size_t i = 0; i < vpMPs.size(); i++)
         {
-            cv::Point3f pos = cv::Point3f(vpMPs[i]->GetWorldPos());
-            allmappoints.push_back(pos);
+            if (vpMPs[i] && !vpMPs[i]->isBad())
+            {
+                cv::Point3f pos = cv::Point3f(vpMPs[i]->GetWorldPos());
+                allmappoints.push_back(pos);
+            }
         }
+        if(allmappoints.size()>0)
+            cv::projectPoints(allmappoints, rVec, tVec, mK, mDistCoef, projectedPoints);
     }
-    
-    cv::projectPoints(allmappoints, rVec, tVec, mK, mDistCoef, projectedPoints);
-    
     return projectedPoints;
 }
 

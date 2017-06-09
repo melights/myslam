@@ -23,8 +23,8 @@ set(HDRS_DUTILS
 set(SRCS_DUTILS
   DUtils/Random.cpp
   DUtils/Timestamp.cpp)
-
-find_package(OpenCV 3.0 QUIET)
+set(OpenCV_DIR "/home/long/depend/opencv/build")
+find_package(OpenCV 3.1 QUIET)
 if(NOT OpenCV_FOUND)
    find_package(OpenCV 2.4.3 QUIET)
    if(NOT OpenCV_FOUND)

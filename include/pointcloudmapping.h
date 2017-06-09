@@ -21,6 +21,7 @@
 #define POINTCLOUDMAPPING_H
 
 #include "System.h"
+#include "Tracking.h"
 
 #include <pcl/common/transforms.h>
 #include <pcl/point_types.h>
@@ -34,6 +35,8 @@ class PointCloudMapping
 public:
     typedef pcl::PointXYZRGBA PointT;
     typedef pcl::PointCloud<PointT> PointCloud;
+    typedef pcl::PointXYZ PointTmono;
+    typedef pcl::PointCloud<PointTmono> PointCloudmono;
     
     PointCloudMapping( double resolution_ );
     
@@ -42,13 +45,18 @@ public:
     void shutdown();
     void Cloud_Viewer();
     void Surface_Viewer();
+    void update();
+void keyboard_callback( const pcl::visualization::KeyboardEvent& event, void* );
+void SetCurrentCameraPose(const cv::Mat &Tcw);
 
 protected:
     pcl::PointCloud< PointCloudMapping::PointT >::Ptr generatePointCloud();
+    pcl::PointCloud< PointCloudMapping::PointTmono >::Ptr generatePointCloudmono();
     
-    PointCloud::Ptr globalMap;
+    PointCloudmono::Ptr globalMap;
     shared_ptr<thread>  cloudViewerThread;   
     shared_ptr<thread>  surfaceViewerThread;   
+    shared_ptr<thread>  updateThread;
     Map* mpMap;
     bool    shutDownFlag    =false;
     mutex   shutDownMutex;  
@@ -64,10 +72,16 @@ protected:
     
     cv::Mat         depthImgs;
     mutex                   keyframeMutex;
+    mutex                   reconstructionMutex;
     uint16_t                lastKeyframeSize =0;
     
      double resolution = 0.04;
-    pcl::VoxelGrid<PointT>  voxel;
+    pcl::VoxelGrid<PointTmono>  voxel;
+    pcl::PolygonMesh::Ptr triangles_ptr;
+    cv::Mat mCameraPose;
+
+    std::mutex mMutexCamera;
+
 };
 
 #endif // POINTCLOUDMAPPING_H
