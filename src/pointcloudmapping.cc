@@ -42,17 +42,59 @@
 //#include "StereoEfficientLargeScale.h"
 using namespace cv;
 //using namespace std;
-#define STRIDE 8
+#define STRIDE 4
 
+///////////CUDA things/////////////
+cv::Mat Q(4, 4, CV_32F) ;
+enum RefImage {LeftRefImage, RightRefImage};
+struct CostVolumeParams {
+
+    uint8_t min_disp;
+    uint8_t max_disp;
+    uint8_t num_disp_layers;
+    uint8_t method; // 0 for AD, 1 for ZNCC
+    uint8_t win_r;
+    RefImage ref_img;
+
+};
+
+struct PrimalDualParams {
+
+    uint32_t num_itr;
+
+    float alpha;
+    float beta;
+    float epsilon;
+    float lambda;
+    float aux_theta;
+    float aux_theta_gamma;
+
+    /* With preconditoining, we don't need these. */
+    float sigma;
+    float tau;
+    float theta;
+
+};
+
+cv::Mat stereoCalcu(int _m, int _n, float* _left_img, float* _right_img, CostVolumeParams _cv_params, PrimalDualParams _pd_params);
+
+////////////////////
 bool simulation = true;
 Eigen::Matrix3f intrinsics;
 PointCloudMapping::PointCloudMapping(double resolution_)
 {
+    FileStorage fs("./Q.xml", FileStorage::READ);
+    if (!fs.isOpened())
+    {
+        printf("Failed to open file ../Q.xml");
+    }
+    fs["Q"] >> Q;
+
     this->resolution = resolution_;
     voxel.setLeafSize(resolution, resolution, resolution);
     globalMap = boost::make_shared<PointCloudmono>();
     triangles_ptr = boost::make_shared<pcl::PolygonMesh>();
-    namedWindow("Disparity", WINDOW_NORMAL);
+    //namedWindow("Disparity", WINDOW_NORMAL);
     //cloudViewerThread = make_shared<thread>(bind(&PointCloudMapping::Cloud_Viewer, this));
     surfaceViewerThread = make_shared<thread>(bind(&PointCloudMapping::Surface_Viewer, this));
     updateThread = make_shared<thread>(bind(&PointCloudMapping::update, this));
@@ -200,6 +242,86 @@ pcl::PointCloud<PointCloudMapping::PointT>::Ptr PointCloudMapping::generatePoint
 }
 
 
+pcl::PointCloud<PointCloudMapping::PointTmono>::Ptr PointCloudMapping::generatePointCloudCUDA()
+{
+    Mat left_grey, right_gery;
+    cvtColor(left, left_grey, cv::COLOR_RGB2GRAY);
+    cvtColor(right, right_gery, cv::COLOR_RGB2GRAY);
+Mat left_32F, right_32F;
+    left_grey.convertTo(left_32F, CV_32F);
+    right_gery.convertTo(right_32F, CV_32F);
+
+    CostVolumeParams cv_params;
+    cv_params.min_disp = 0;
+    cv_params.max_disp = 64;
+    cv_params.method = 1;
+    cv_params.win_r = 10;
+    cv_params.ref_img = LeftRefImage;
+
+    PrimalDualParams pd_params;
+    pd_params.num_itr = 150; // 500
+    pd_params.alpha = 0.1; // 10.0 0.01
+    pd_params.beta = 1.0; // 1.0
+    pd_params.epsilon = 0.1; // 0.1
+    pd_params.lambda = 1e-2; // 1e-3
+    pd_params.aux_theta = 10; // 10
+    pd_params.aux_theta_gamma = 1e-6; // 1e-6
+    std::cout<<left_32F.size()<<std::endl;
+    cv::Mat result =  stereoCalcu(left_32F.rows, left_32F.cols, (float*)left_32F.data, (float*)right_32F.data, cv_params, pd_params);
+
+    result.convertTo(result, CV_32F, cv_params.max_disp);
+    cv::Mat image3D;
+    cv::reprojectImageTo3D(result, image3D, Q);
+
+    PointCloudmono::Ptr point_cloud_ptr(new PointCloudmono());
+    for(int x = 0; x < left.cols - STRIDE; x += STRIDE)
+    {
+        for(int y = 0; y < left.rows - STRIDE; y += STRIDE)
+        {
+            if (simulation)
+            {
+                if ((y - 240) * (y - 240) + (x - 320) * (x - 320) > 67600) //circle mask for simulation data
+                    continue;
+                if (left.at<Vec3b>(y, x)[0] == 64 && left.at<Vec3b>(y, x)[1] == 64 && left.at<Vec3b>(y, x)[2] == 64) //remove grey background for simulation data
+                    continue;
+            }
+
+            cv::Vec3f point3D = image3D.at<cv::Vec3f>(y,x);
+            PointTmono basic_point;
+            basic_point.x = point3D.val[0];
+            basic_point.y = point3D.val[1];
+            basic_point.z = point3D.val[2];
+            //std::cout<<basic_point<<std::endl;
+            if(cvIsInf(point3D.val[0]) || cvIsInf(point3D.val[1]) || cvIsInf(point3D.val[2]))
+                ;//
+            else
+            {
+ //               cout << point3D.val[0] << " " << point3D.val[1] << " " << point3D.val[2] << endl ;
+                point_cloud_ptr->points.push_back(basic_point);
+
+            }
+        }
+    }
+
+    Eigen::Isometry3d T = ORB_SLAM2::Converter::toSE3Quat(keyframe->GetPose());
+    PointCloudmono::Ptr cloud(new PointCloudmono);
+    pcl::transformPointCloud(*point_cloud_ptr, *cloud, T.inverse().matrix());
+    cloud->is_dense = false;
+    //cloud->width = (int) cloud->points.size();
+    //cloud->height = 1;
+    //pcl::io::savePCDFile( "/home/long/surface_reconstruction/PCL/data/testfilter.pcd", *cloud );
+
+    cout << "generate point cloud for kf " << keyframe->mnId << ", size=" << cloud->points.size() << endl;
+
+
+    //   pcl::StatisticalOutlierRemoval<PointT> statistical_filter;
+    //   statistical_filter.setMeanK(80);
+    //   statistical_filter.setStddevMulThresh(1.0);
+    //   statistical_filter.setInputCloud(filter1);
+    //   statistical_filter.filter(*filter2);
+
+    return cloud;
+}
 pcl::PointCloud<PointCloudMapping::PointTmono>::Ptr PointCloudMapping::generatePointCloudmono()
 {
     Mat left_grey, right_gery;
@@ -220,8 +342,8 @@ pcl::PointCloud<PointCloudMapping::PointTmono>::Ptr PointCloudMapping::generateP
     double maxVal;
     minMaxLoc(disp, &minVal, &maxVal);
     disp.convertTo(disp8U, CV_8UC1, 255 / (maxVal - minVal));
-    imshow("Disparity", disp8U);
-    cv::waitKey(10);
+    //imshow("Disparity", disp8U);
+    //cv::waitKey(10);
     double px, py, pz;
     uchar pr, pg, pb;
     PointCloudmono::Ptr tmp(new PointCloudmono());
@@ -383,7 +505,7 @@ void PointCloudMapping::update()
         tree->setInputCloud(globalMap);
         n.setInputCloud(globalMap);
         n.setSearchMethod(tree);
-        n.setKSearch(5);
+        n.setKSearch(10);
         n.compute(*normals);
         //* normals should not contain the point normals + surface curvatures
 
@@ -400,7 +522,7 @@ void PointCloudMapping::update()
         pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;
 
         // Set the maximum distance between connected points (maximum edge length)
-        gp3.setSearchRadius(2);
+        gp3.setSearchRadius(10);
 
         // Set typical values for the parameters
         gp3.setMu(2.5);
@@ -435,7 +557,7 @@ void PointCloudMapping::Surface_Viewer()
     surface_viewer.addCoordinateSystem(1); //设置坐标系,参数为坐标显示尺寸
     surface_viewer.initCameraParameters();
     //surface_viewer.addPolygonMesh(*triangles_ptr,"my"); //设置所要显示的网格对象
-    while (0)
+    while (1)
     {
         //pcl::PolygonMesh triangles_cp=triangles;
         surface_viewer.removePolygonMesh("my"); //设置所要显示的网格对象

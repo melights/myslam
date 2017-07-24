@@ -22,16 +22,16 @@ int main(void)
             adder = -1;
         else if (imageNum == 1)
             adder = 1;
-        sprintf(filenameR, "/home/long/data/Dataset8/left_rect/%04d.png", imageNum);
-        sprintf(filenameL, "/home/long/data/Dataset8/right_rect/%04d.png", imageNum);
+        sprintf(filenameR, "/home/long/data/Dataset6/left_rect/%04d.png", imageNum);
+        sprintf(filenameL, "/home/long/data/Dataset6/right_rect/%04d.png", imageNum);
         //std::cout << filenameL << std::endl;
         imageL = cv::imread(filenameL, 1);
         imageR = cv::imread(filenameR, 1);
         imageNum += adder;
         
         SLAM.TrackStereo(imageL,imageR,1);        
-        //cv::imshow("aa",imageL);
-        //cv::waitKey();
+        cv::imshow("aa",imageL);
+        cv::waitKey();
     }
 
     return 0;

@@ -52,6 +52,7 @@ void SetCurrentCameraPose(const cv::Mat &Tcw);
 protected:
     pcl::PointCloud< PointCloudMapping::PointT >::Ptr generatePointCloud();
     pcl::PointCloud< PointCloudMapping::PointTmono >::Ptr generatePointCloudmono();
+    pcl::PointCloud< PointCloudMapping::PointTmono >::Ptr generatePointCloudCUDA();
     
     PointCloudmono::Ptr globalMap;
     shared_ptr<thread>  cloudViewerThread;   

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 project(ORB_SLAM2)
 
 IF(NOT CMAKE_BUILD_TYPE)
-  SET(CMAKE_BUILD_TYPE Release)
+  SET(CMAKE_BUILD_TYPE Debug)
 ENDIF()
 
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
@@ -84,6 +84,7 @@ ${Pangolin_LIBRARIES}
 ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
 ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
 ${PCL_LIBRARIES}
+${PROJECT_SOURCE_DIR}/libCUDA_TARGETS.a
 )
 
 # Build examples

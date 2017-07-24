@@ -183,7 +183,7 @@ void FrameDrawer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
 void FrameDrawer::Update(Tracking *pTracker)
 {
     unique_lock<mutex> lock(mMutex);
-    pTracker->mImGray.copyTo(mIm);
+    pTracker->mImRGB.copyTo(mIm);
     mvCurrentKeys=pTracker->mCurrentFrame.mvKeys;
     mvDistance=pTracker->mCurrentFrame.mvDistance;
     projectedPoints = pTracker->Get_projectedPoints();
