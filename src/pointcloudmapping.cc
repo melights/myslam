@@ -38,6 +38,7 @@
 #include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/surface/vtk_smoothing/vtk_utils.h>
 #include "Converter.h"
 //#include "StereoEfficientLargeScale.h"
 using namespace cv;
@@ -81,7 +82,7 @@ cv::Mat stereoCalcu(int _m, int _n, float* _left_img, float* _right_img, CostVol
 ////////////////////
 bool simulation = true;
 Eigen::Matrix3f intrinsics;
-PointCloudMapping::PointCloudMapping(double resolution_)
+PointCloudMapping::PointCloudMapping(double resolution_, shared_ptr<MeshOverlay> pMeshOverlay, int viewer ): mpMeshOverlay(pMeshOverlay)
 {
     FileStorage fs("./Q.xml", FileStorage::READ);
     if (!fs.isOpened())
@@ -96,7 +97,8 @@ PointCloudMapping::PointCloudMapping(double resolution_)
     triangles_ptr = boost::make_shared<pcl::PolygonMesh>();
     //namedWindow("Disparity", WINDOW_NORMAL);
     //cloudViewerThread = make_shared<thread>(bind(&PointCloudMapping::Cloud_Viewer, this));
-    surfaceViewerThread = make_shared<thread>(bind(&PointCloudMapping::Surface_Viewer, this));
+    if(viewer)
+        surfaceViewerThread = make_shared<thread>(bind(&PointCloudMapping::Surface_Viewer, this));
     updateThread = make_shared<thread>(bind(&PointCloudMapping::update, this));
 }
 
@@ -266,7 +268,7 @@ Mat left_32F, right_32F;
     pd_params.lambda = 1e-2; // 1e-3
     pd_params.aux_theta = 10; // 10
     pd_params.aux_theta_gamma = 1e-6; // 1e-6
-    std::cout<<left_32F.size()<<std::endl;
+    //std::cout<<left_32F.size()<<std::endl;
     cv::Mat result =  stereoCalcu(left_32F.rows, left_32F.cols, (float*)left_32F.data, (float*)right_32F.data, cv_params, pd_params);
 
     result.convertTo(result, CV_32F, cv_params.max_disp);
@@ -518,30 +520,45 @@ void PointCloudMapping::update()
         pcl::search::KdTree<pcl::PointNormal>::Ptr tree2(new pcl::search::KdTree<pcl::PointNormal>);
         tree2->setInputCloud(cloud_with_normals);
 
-        // Initialize objects
-        pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;
+        pcl::PolygonMesh::Ptr triangles_tmp(new pcl::PolygonMesh());
+        // // Initialize objects
+        // pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;
 
-        // Set the maximum distance between connected points (maximum edge length)
-        gp3.setSearchRadius(10);
+        // // Set the maximum distance between connected points (maximum edge length)
+        // gp3.setSearchRadius(10);
 
-        // Set typical values for the parameters
-        gp3.setMu(2.5);
-        gp3.setMaximumNearestNeighbors(100);
-        gp3.setMaximumSurfaceAngle(M_PI / 4); // 45 degrees
-        gp3.setMinimumAngle(M_PI / 18);       // 10 degrees
-        gp3.setMaximumAngle(2 * M_PI / 3);    // 120 degrees
-        gp3.setNormalConsistency(false);
+        // // Set typical values for the parameters
+        // gp3.setMu(2.5);
+        // gp3.setMaximumNearestNeighbors(100);
+        // gp3.setMaximumSurfaceAngle(M_PI / 4); // 45 degrees
+        // gp3.setMinimumAngle(M_PI / 18);       // 10 degrees
+        // gp3.setMaximumAngle(2 * M_PI / 3);    // 120 degrees
+        // gp3.setNormalConsistency(false);
 
-pcl::PolygonMesh::Ptr triangles_tmp(new pcl::PolygonMesh());
-        // Get result
-        gp3.setInputCloud(cloud_with_normals);
-        gp3.setSearchMethod(tree2);
-        gp3.reconstruct(*triangles_tmp);
+
+        // // Get result
+        // gp3.setInputCloud(cloud_with_normals);
+        // gp3.setSearchMethod(tree2);
+        // gp3.reconstruct(*triangles_tmp);
+
+
+        pcl::Poisson<pcl::PointNormal> poisson;
+        poisson.setInputCloud(cloud_with_normals);
+        poisson.reconstruct(*triangles_tmp);
+
+
         unique_lock<mutex> lck(reconstructionMutex);
         triangles_ptr.swap(triangles_tmp);
         t = getTickCount() - t;
         printf("Total point: %d, Time elapsed: %fms\n", globalMap->size(), t * 1000 / getTickFrequency());
         //cloudviewer.spinOnce(100);
+        if(mpMeshOverlay)
+        {
+            vtkSmartPointer<vtkPolyData> poly;
+            pcl::VTKUtils::convertToVTK(*triangles_ptr, poly);
+            mpMeshOverlay->setMesh(poly);
+        }
+        
     }
 
 }
@@ -609,12 +626,34 @@ void PointCloudMapping::keyboard_callback( const pcl::visualization::KeyboardEve
 {
                 if ( event.keyDown () && event.getKeyCode () == 0x00000020) 
                   { 
-                        pcl::io::savePLYFile("/home/long/digest.ply",*triangles_ptr);
+                        pcl::io::savePCDFile("/home/long/digest.pcd",*globalMap);
                   } 
 }
 
-void PointCloudMapping::SetCurrentCameraPose(const cv::Mat &Tcw)
+void PointCloudMapping::SetCurrentCameraPose(const cv::Mat &Tcw, const cv::Mat &image, const cv::Mat &mK, const cv::Mat &mDistCoef)
 {
     unique_lock<mutex> lock(mMutexCamera);
     mCameraPose = Tcw.clone();
+    //////////////////
+    cv::Mat rVec, tVec, camimage;
+    camimage=image.clone();
+    cv::Rodrigues(mCameraPose.rowRange(0, 3).colRange(0, 3), rVec);
+    tVec = mCameraPose.rowRange(0, 3).col(3).clone();
+    std::vector<cv::Point3f> allmappoints;
+    std::vector<cv::Point2f> projectedPoints;
+    for (pcl::PointCloud<pcl::PointXYZ>::iterator it = globalMap->begin(); it != globalMap->end(); it++)
+    {
+        cv::Point3f pos = cv::Point3f(it->x,it->y,it->z);
+        allmappoints.push_back(pos);
+    }
+    if(allmappoints.size()>0)
+    cv::projectPoints(allmappoints, rVec, tVec, mK, mDistCoef, projectedPoints);
+    for (size_t j = 0; j < projectedPoints.size(); ++j)
+    {
+        cv::Point2f r1 = projectedPoints[j];
+        cv::circle(camimage, cv::Point(r1.x, r1.y), 2, cv::Scalar(0, 255, 0), 1);
+    }
+    cv::imshow("Feature point densify",camimage);
+    cv::waitKey(10);
+
 }

@@ -75,6 +75,7 @@ src/Sim3Solver.cc
 src/Initializer.cc
 src/Viewer.cc
 src/pointcloudmapping.cc
+src/MeshOverlay.cc
 )
 
 target_link_libraries(${PROJECT_NAME}

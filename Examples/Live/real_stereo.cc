@@ -31,7 +31,7 @@ int main(void)
         
         SLAM.TrackStereo(imageL,imageR,1);        
         cv::imshow("aa",imageL);
-        cv::waitKey();
+        //cv::waitKey();
     }
 
     return 0;

@@ -36,9 +36,9 @@
 #include "ORBVocabulary.h"
 #include "Viewer.h"
 #include "pointcloudmapping.h"
-
+#include "MeshOverlay.h"
 class PointCloudMapping; 
-
+class MeshOverlay; 
 namespace ORB_SLAM2
 {
 
@@ -174,6 +174,7 @@ private:
 
     // point cloud mapping
     shared_ptr<PointCloudMapping>  mpPointCloudMapping;
+    shared_ptr<MeshOverlay>  mpMeshoverlay;
     
     // Tracking state
     int mTrackingState;

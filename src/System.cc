@@ -64,8 +64,12 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     }
 
     float resolution = fsSettings["PointCloudMapping.Resolution"];
-    int enable_PCM = fsSettings["PointCloudMapping.Enable"];
+    float fov = fsSettings["MeshOverlay.fov"];
 
+    int enable_PCM = fsSettings["PointCloudMapping.Enable"];
+    int enable_PCMviewer = fsSettings["PointCloudMapping.ViewerEnable"];
+    int enable_MOL = fsSettings["MeshOverlay.Enable"];
+    float Max_opa = fsSettings["MeshOverlay.Max_opa"];
     //Load ORB Vocabulary
     cout << endl << "Loading ORB Vocabulary. This could take a while..." << endl;
     clock_t tStart = clock();
@@ -95,8 +99,11 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
     //Initialize the Tracking thread
     //(it will live in the main thread of execution, the one that called this constructor)
+    if(enable_MOL==1)
+        mpMeshoverlay = make_shared<MeshOverlay>(fov,Max_opa);
     if(enable_PCM==1)
-        mpPointCloudMapping = make_shared<PointCloudMapping>( resolution );
+        mpPointCloudMapping = make_shared<PointCloudMapping>( resolution, mpMeshoverlay, enable_PCMviewer );
+
     mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
                              mpMap, mpPointCloudMapping, mpKeyFrameDatabase, strSettingsFile, mSensor);
 
@@ -170,7 +177,8 @@ cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const
     }
 
     cv::Mat Tcw = mpTracker->GrabImageStereo(imLeft,imRight,timestamp);
-
+    if(mpMeshoverlay)
+        mpMeshoverlay->setImages(imLeft,Tcw);
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;

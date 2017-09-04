@@ -22,14 +22,14 @@
 
 #include "System.h"
 #include "Tracking.h"
-
+#include "MeshOverlay.h"
 #include <pcl/common/transforms.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
 #include <condition_variable>
 #include <pcl/visualization/pcl_visualizer.h>
 using namespace ORB_SLAM2;
-
+class MeshOverlay;
 class PointCloudMapping
 {
 public:
@@ -38,7 +38,7 @@ public:
     typedef pcl::PointXYZ PointTmono;
     typedef pcl::PointCloud<PointTmono> PointCloudmono;
     
-    PointCloudMapping( double resolution_ );
+    PointCloudMapping( double resolution_, shared_ptr<MeshOverlay> pMeshOverlay, int viewer );
     
     // 插入一个keyframe，会更新一次地图
     void insertKeyFrame(KeyFrame* kf, cv::Mat& left_img, cv::Mat& right_img);
@@ -47,7 +47,7 @@ public:
     void Surface_Viewer();
     void update();
 void keyboard_callback( const pcl::visualization::KeyboardEvent& event, void* );
-void SetCurrentCameraPose(const cv::Mat &Tcw);
+void SetCurrentCameraPose(const cv::Mat &Tcw, const cv::Mat &image, const cv::Mat &mK, const cv::Mat &mDistCoef);
 
 protected:
     pcl::PointCloud< PointCloudMapping::PointT >::Ptr generatePointCloud();
@@ -82,7 +82,7 @@ protected:
     cv::Mat mCameraPose;
 
     std::mutex mMutexCamera;
-
+    shared_ptr<MeshOverlay> mpMeshOverlay;
 };
 
 #endif // POINTCLOUDMAPPING_H
