@@ -71,6 +71,73 @@ class vtkTimerCallback2 : public vtkCommand
     
 };
 
+class MouseInteractorStyle2 : public vtkInteractorStyleTrackballCamera
+{
+  public:
+    static MouseInteractorStyle2* New();
+    vtkTypeMacro(MouseInteractorStyle2, vtkInteractorStyleTrackballCamera);
+
+    virtual void OnRightButtonDown()
+    {
+      int* clickPos = this->GetInteractor()->GetEventPosition();
+	
+      // Pick from this location.
+      vtkSmartPointer<vtkPropPicker>  picker =
+        vtkSmartPointer<vtkPropPicker>::New();
+      picker->Pick(clickPos[0], clickPos[1], 0, this->GetDefaultRenderer());
+      double* pos = picker->GetPickPosition();
+      std::cout << "Pick position (world coordinates) is: "
+                << pos[0] << " " << pos[1]
+                << " " << pos[2] << std::endl;
+
+      std::cout << "Picked actor: " << picker->GetActor() << std::endl;
+      //Create a sphere
+    //   vtkSmartPointer<vtkSphereSource> sphereSource =
+    //     vtkSmartPointer<vtkSphereSource>::New();
+    //   sphereSource->SetCenter(pos[0], pos[1], pos[2]);
+    //   sphereSource->SetRadius(0.01);
+if(pos[0]==0||pos[1]==0||pos[2]==0){
+    vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
+    return;
+}
+  vtkSmartPointer<vtkOBJReader> reader =
+    vtkSmartPointer<vtkOBJReader>::New();
+  reader->SetFileName("/home/long/Meshoverlay/arrow.obj");
+  reader->Update();
+vtkSmartPointer<vtkTransform> transform =
+    vtkSmartPointer<vtkTransform>::New();
+  transform->Scale(3,3,3);
+ 
+  vtkSmartPointer<vtkTransformFilter> transformFilter =
+    vtkSmartPointer<vtkTransformFilter>::New();
+  transformFilter->SetInputConnection(reader->GetOutputPort());
+  transformFilter->SetTransform(transform);
+      //Create a mapper and actor
+      vtkSmartPointer<vtkPolyDataMapper> mapper =
+        vtkSmartPointer<vtkPolyDataMapper>::New();
+      mapper->SetInputConnection(transformFilter->GetOutputPort());
+
+      vtkSmartPointer<vtkActor> actor =
+        vtkSmartPointer<vtkActor>::New();
+      actor->SetMapper(mapper);
+      actor->SetPosition(pos[0], pos[1], pos[2]);
+      vtkMath::RandomSeed(time(NULL));
+      double R = vtkMath::Random(0.0,1.0);
+      double G = vtkMath::Random(0.0,2.0);
+      double B = vtkMath::Random(0.0,2.0);
+      actor->GetProperty()->SetColor(R, G, B); //(R,G,B)
+
+      //this->GetInteractor()->GetRenderWindow()->GetRenderers()->GetDefaultRenderer()->AddActor(actor);
+      this->GetDefaultRenderer()->AddActor(actor);
+      
+      // Forward events
+      vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
+    }
+
+  private:
+
+};
+vtkStandardNewMacro(MouseInteractorStyle2);
 MeshOverlay::MeshOverlay(float fov, float Max_opa):m_fov(fov),m_opa(Max_opa),m_Max_opa(Max_opa),m_adder(Max_opa/25),init(false)
 {
     //frameL=image.copy();
@@ -227,7 +294,7 @@ int MeshOverlay::Init()
     // polyactor->GetProperty()->SetVertexColor(0.5,1.0,0.8);
     polyrenderer->SetLayer(1);
     //polyrenderer->SetUseShadows(0);
-    polyrenderer->SetOcclusionRatio(1);
+    //polyrenderer->SetOcclusionRatio(1);
     /////////////////// PilotView /////////////////////
 
     pilotrenderer = vtkSmartPointer<vtkRenderer>::New();
@@ -315,11 +382,11 @@ int MeshOverlay::Init()
     renderWindow->Render();
 
 /////////////////// Interaction /////////////////////
-//       vtkSmartPointer<MouseInteractorStyle2> style =
-//     vtkSmartPointer<MouseInteractorStyle2>::New();
-//   style->SetDefaultRenderer(polyrenderer);
+      vtkSmartPointer<MouseInteractorStyle2> style =
+    vtkSmartPointer<MouseInteractorStyle2>::New();
+  style->SetDefaultRenderer(polyrenderer);
 
-//   renderWindowInteractor->SetInteractorStyle( style );
+  renderWindowInteractor->SetInteractorStyle( style );
 
     renderWindowInteractor->Initialize();
 /////////////////// Timer /////////////////////
