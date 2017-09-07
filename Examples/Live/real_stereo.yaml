@@ -65,4 +65,5 @@ PointCloudMapping.Enable: 1
 PointCloudMapping.ViewerEnable: 0
 PointCloudMapping.Resolution: 0.2
 MeshOverlay.Enable: 1
-MeshOverlay.fov: 37
+MeshOverlay.fov: 57
+MeshOverlay.Max_opa: 0.5

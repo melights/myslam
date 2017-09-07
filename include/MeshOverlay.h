@@ -29,6 +29,7 @@ public:
     vtkSmartPointer<vtkPolyDataMapper> polymapper;
     vtkSmartPointer<vtkActor> polyactor;
     vtkSmartPointer<vtkRenderer> polyrenderer;
+    vtkSmartPointer<vtkRenderer> pilotrenderer;
     vtkSmartPointer<vtkImageImport> importer;
     vtkSmartPointer<vtkRenderWindowInteractor> renderWindowInteractor;
     MeshOverlay(float fov,float Max_opa);
@@ -40,12 +41,14 @@ public:
     void grabImage();
     void setMesh(vtkSmartPointer< vtkPolyData > &poly_data);
 private:
+    cv::Mat frameL;
     shared_ptr<thread>  OverlayThread;   
     bool bindToImporter(cv::Mat &_src);
     float m_fov;
     float m_opa;    
     float m_Max_opa;
     float m_adder;
+    bool init;
 };
 
 #endif // POINTCLOUDMAPPING_H

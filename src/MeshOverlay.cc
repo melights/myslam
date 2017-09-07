@@ -43,7 +43,7 @@
 using namespace cv;
 
 
-Mat frameL;
+
 
 class vtkTimerCallback2 : public vtkCommand
 {
@@ -71,7 +71,7 @@ class vtkTimerCallback2 : public vtkCommand
     
 };
 
-MeshOverlay::MeshOverlay(float fov, float Max_opa):m_fov(fov),m_opa(Max_opa),m_Max_opa(Max_opa),m_adder(Max_opa/25)
+MeshOverlay::MeshOverlay(float fov, float Max_opa):m_fov(fov),m_opa(Max_opa),m_Max_opa(Max_opa),m_adder(Max_opa/25),init(false)
 {
     //frameL=image.copy();
     OverlayThread = make_shared<thread>(bind(&MeshOverlay::Init, this));
@@ -178,6 +178,10 @@ void MeshOverlay::setMesh(vtkSmartPointer< vtkPolyData > &poly_data)
 {
     std::cout<<"received polydata"<<std::endl;
     poly->DeepCopy(poly_data);
+    if(!init){
+        pilotrenderer->ResetCamera();
+        init=true;
+    }
 
 }
 int MeshOverlay::Init()
@@ -195,31 +199,18 @@ int MeshOverlay::Init()
     backgroundRenderer = vtkSmartPointer<vtkRenderer>::New();
     backgroundRenderer->SetLayer(0);
     backgroundRenderer->InteractiveOff();
+    backgroundRenderer->SetViewport(0.0, 0.0, 0.5, 1.0);
+
 
     /////////////////// Polydata /////////////////////
     polyrenderer = vtkSmartPointer<vtkRenderer>::New();
-
+    polyrenderer->SetViewport(0.0, 0.0, 0.5, 1.0);
     //vtkSmartPointer<vtkPLYReader> reader = vtkSmartPointer<vtkPLYReader>::New();
     ////reader->SetFileName("/home/long/digest.ply");
     //reader->SetFileName("../digest.ply");
     
     poly = vtkSmartPointer<vtkPolyData>::New();
     // poly->DeepCopy(reader->GetOutput());
-
-// vtkSmartPointer<vtkTransform> transform =
-//     vtkSmartPointer<vtkTransform>::New();
-//  transform->RotateX(0);
-//  transform->RotateY(0);
-//  transform->RotateZ(0);
-//   transform->Scale(1,1,1);
-
-//   transform->Translate(0.0,0.0,0.0);
-
-//   vtkSmartPointer<vtkTransformFilter> transformFilter =
-//     vtkSmartPointer<vtkTransformFilter>::New();
-//   transformFilter->SetInputConnection(reader->GetOutputPort());
-//   transformFilter->SetTransform(transform);
-
     
     polymapper = vtkSmartPointer<vtkPolyDataMapper>::New();
     polymapper->SetInput(poly);
@@ -235,6 +226,26 @@ int MeshOverlay::Init()
     // polyactor->GetProperty()->SetVertexVisibility(1);
     // polyactor->GetProperty()->SetVertexColor(0.5,1.0,0.8);
     polyrenderer->SetLayer(1);
+    //polyrenderer->SetUseShadows(0);
+    polyrenderer->SetOcclusionRatio(1);
+    /////////////////// PilotView /////////////////////
+
+    pilotrenderer = vtkSmartPointer<vtkRenderer>::New();
+    pilotrenderer->SetViewport(0.5, 0.0, 1.0, 1.0);
+    //vtkSmartPointer<vtkPLYReader> reader = vtkSmartPointer<vtkPLYReader>::New();
+    ////reader->SetFileName("/home/long/digest.ply");
+    //reader->SetFileName("../digest.ply");
+    
+    vtkSmartPointer<vtkActor> pilotactor = vtkSmartPointer<vtkActor>::New();
+    pilotactor->SetMapper(polymapper);
+    pilotactor->GetProperty()->SetRepresentationToWireframe();
+
+    // polyactor->GetProperty()->SetRenderLinesAsTubes(1);
+    // polyactor->GetProperty()->SetRenderPointsAsSpheres(1);
+    // polyactor->GetProperty()->SetVertexVisibility(1);
+    // polyactor->GetProperty()->SetVertexColor(0.5,1.0,0.8);
+    //pilotrenderer->SetLayer(0);
+
 
 /////////////////// Render Window /////////////////////
 
@@ -243,10 +254,11 @@ int MeshOverlay::Init()
         vtkSmartPointer<vtkRenderWindow>::New();
 
 
-    renderWindow->SetSize(640,480);
+    renderWindow->SetSize(1280,480);
     renderWindow->SetNumberOfLayers(2);
     renderWindow->AddRenderer(backgroundRenderer);
     renderWindow->AddRenderer(polyrenderer);
+    renderWindow->AddRenderer(pilotrenderer);
     //renderWindow->AddRenderer(sphererenderer);
 
     renderWindowInteractor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
@@ -254,6 +266,7 @@ int MeshOverlay::Init()
 
     // Add actors to the renderers
     polyrenderer->AddActor(polyactor);
+    pilotrenderer->AddActor(pilotactor);
     backgroundRenderer->AddActor(imageActor);
     // sphererenderer->AddActor(sphereactor);
     // Render once to figure out where the background camera will be
@@ -262,10 +275,7 @@ int MeshOverlay::Init()
   vtkSmartPointer<vtkContourWidget> contourWidget = 
     vtkSmartPointer<vtkContourWidget>::New();
   contourWidget->SetInteractor(renderWindowInteractor);
-  
-  
-
-  
+    
   vtkOrientedGlyphContourRepresentation* rep = 
     vtkOrientedGlyphContourRepresentation::SafeDownCast(
     contourWidget->GetRepresentation());
@@ -273,6 +283,7 @@ int MeshOverlay::Init()
   vtkSmartPointer<vtkPolygonalSurfacePointPlacer> pointPlacer =
     vtkSmartPointer<vtkPolygonalSurfacePointPlacer>::New();
   pointPlacer->AddProp(polyactor);
+  pointPlacer->AddProp(pilotactor);
   pointPlacer->GetPolys()->AddItem(polymapper->GetInput());
 
   rep->GetLinesProperty()->SetColor(1, 0, 0);
